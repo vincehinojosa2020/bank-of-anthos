@@ -34,9 +34,10 @@ pipeline:
                   name: Apply dependency patches
                   identifier: patch_deps
                   spec:
-                    image: alpine:latest
+                    image: ubuntu:22.04
                     shell: Sh
                     command: |-
+                      set -e
                       echo "=== JAVA PATCHES ==="
                       echo "--- Before ---"
                       grep -n "3.5.9" bank-of-anthos/src/ledger/*/pom.xml || echo "(no 3.5.9)"
@@ -46,7 +47,7 @@ pipeline:
                         sed -i "s|<version>3.5.9</version>|<version>3.5.14</version>|g" bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo ""
-                      echo "Step 2: Tomcat override to 10.1.55 + Netty override to 4.1.135.Final"
+                      echo "Step 2: Tomcat 10.1.55 + Netty 4.1.135.Final overrides"
                       for svc in balancereader ledgerwriter transactionhistory; do
                         sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>\n        <netty.version>4.1.135.Final</netty.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
                       done
@@ -54,14 +55,14 @@ pipeline:
                       grep -nE "3.5.14|tomcat.version|netty.version" bank-of-anthos/src/ledger/*/pom.xml
                       echo ""
                       echo "=== PYTHON PATCHES ==="
-                      echo "--- Before ---"
-                      grep -rn "cryptography==46.0.3" bank-of-anthos/src --include="requirements*.txt" --include="requirements*.in" 2>/dev/null
+                      echo "--- Before (using portable find) ---"
+                      find bank-of-anthos/src -type f \( -name "requirements*.txt" -o -name "requirements*.in" \) -exec grep -Hn "cryptography==46.0.3" {} \; || true
                       echo ""
-                      echo "Step 3: cryptography==46.0.3 to cryptography==47.0.0 (all requirements files)"
-                      find bank-of-anthos/src -name "requirements*.txt" -exec sed -i "s|cryptography==46.0.3|cryptography==47.0.0|g" {} \;
-                      find bank-of-anthos/src -name "requirements*.in" -exec sed -i "s|cryptography==46.0.3|cryptography==47.0.0|g" {} \;
+                      echo "Step 3: cryptography==46.0.3 to cryptography==47.0.0 in all requirements files"
+                      find bank-of-anthos/src -type f -name "requirements*.txt" -exec sed -i "s|cryptography==46.0.3|cryptography==47.0.0|g" {} \;
+                      find bank-of-anthos/src -type f -name "requirements*.in" -exec sed -i "s|cryptography==46.0.3|cryptography==47.0.0|g" {} \;
                       echo "--- After ---"
-                      grep -rn "cryptography==" bank-of-anthos/src --include="requirements*.txt" --include="requirements*.in" 2>/dev/null
+                      find bank-of-anthos/src -type f \( -name "requirements*.txt" -o -name "requirements*.in" \) -exec grep -Hn "cryptography==" {} \;
               - step:
                   type: Run
                   name: Build Java services
