@@ -26,7 +26,9 @@ pipeline:
                   spec:
                     image: alpine/git:latest
                     shell: Sh
-                    command: git clone --depth 1 https://github.com/GoogleCloudPlatform/bank-of-anthos.git
+                    command: |-
+                      git clone --depth 1 https://github.com/GoogleCloudPlatform/bank-of-anthos.git
+                      ls -la bank-of-anthos | head -20
               - step:
                   type: Run
                   name: Build Java services
@@ -54,7 +56,7 @@ pipeline:
                     shell: Sh
                     command: |-
                       set -e
-                      apt-get update -qq && apt-get install -y -qq build-essential
+                      apt-get update && apt-get install -y build-essential
                       pip install --upgrade pip
                       for svc in contacts userservice frontend; do
                         echo "=== Installing $svc ==="
@@ -74,22 +76,35 @@ pipeline:
                   name: Sonatype Lifecycle scan
                   identifier: sonatype_scan
                   spec:
-                    image: openjdk:17-slim
+                    image: eclipse-temurin:17-jdk
                     shell: Sh
                     envVariables:
                       IQ_SERVER_URL: <+secrets.getValue("iq_server_url")>
                       IQ_USERNAME: <+secrets.getValue("iq_username")>
                       IQ_PASSWORD: <+secrets.getValue("iq_password")>
                     command: |-
-                      set -e
-                      apt-get update -qq && apt-get install -y -qq curl
-                      echo "=== Verifying ngrok tunnel to IQ Server ==="
-                      curl -sf -H "ngrok-skip-browser-warning: true" "${IQ_SERVER_URL}/rest/config/proxy" -o /dev/null && echo "Tunnel reachable" || echo "Tunnel check returned non-200 (CLI may still work)"
+                      set -ex
+                      echo "=== Step started ==="
+                      echo "Working directory: $(pwd)"
+                      echo "IQ server URL set: $([ -n "$IQ_SERVER_URL" ] && echo YES || echo NO)"
+                      echo "IQ username set: $([ -n "$IQ_USERNAME" ] && echo YES || echo NO)"
+                      echo "IQ password set: $([ -n "$IQ_PASSWORD" ] && echo YES || echo NO)"
+                      echo ""
+                      echo "=== Checking curl ==="
+                      which curl || (apt-get update && apt-get install -y curl)
+                      curl --version | head -1
+                      echo ""
+                      echo "=== Verifying ngrok tunnel ==="
+                      curl -v -H "ngrok-skip-browser-warning: true" "${IQ_SERVER_URL}/rest/config/proxy" 2>&1 | tail -20 || echo "Tunnel check failed but continuing"
                       echo ""
                       echo "=== Downloading Sonatype IQ CLI ==="
-                      curl -sSL -o nexus-iq-cli.jar https://download.sonatype.com/clm/scanner/latest.jar
+                      curl -fSL -o nexus-iq-cli.jar https://download.sonatype.com/clm/scanner/latest.jar
+                      ls -la nexus-iq-cli.jar
+                      echo ""
+                      echo "=== Verifying bank-of-anthos directory ==="
+                      ls -la bank-of-anthos/ | head -20
                       echo ""
                       echo "=== Running Lifecycle scan ==="
                       java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
                       echo ""
-                      echo "=== Scan complete. Check IQ Server UI for results. ==="
+                      echo "=== Scan complete ==="
