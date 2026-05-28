@@ -31,22 +31,30 @@ pipeline:
                       ls -la bank-of-anthos | head -20
               - step:
                   type: Run
-                  name: Apply Spring Boot upgrade patch
-                  identifier: patch_spring_boot
+                  name: Apply Spring Boot and Tomcat patch
+                  identifier: patch_deps
                   spec:
                     image: alpine:latest
                     shell: Sh
                     command: |-
                       echo "=== Before patch ==="
-                      grep -n "3.5.9" bank-of-anthos/src/ledger/*/pom.xml
+                      grep -n "3.5.9" bank-of-anthos/src/ledger/*/pom.xml || echo "(no 3.5.9 found)"
                       echo ""
-                      echo "=== Applying upgrade 3.5.9 to 3.5.14 ==="
-                      sed -i 's|<version>3.5.9</version>|<version>3.5.14</version>|g' bank-of-anthos/src/ledger/balancereader/pom.xml
-                      sed -i 's|<version>3.5.9</version>|<version>3.5.14</version>|g' bank-of-anthos/src/ledger/ledgerwriter/pom.xml
-                      sed -i 's|<version>3.5.9</version>|<version>3.5.14</version>|g' bank-of-anthos/src/ledger/transactionhistory/pom.xml
+                      echo "=== Step 1 Upgrade Spring Boot 3.5.9 to 3.5.14 ==="
+                      for svc in balancereader ledgerwriter transactionhistory; do
+                        sed -i "s|<version>3.5.9</version>|<version>3.5.14</version>|g" bank-of-anthos/src/ledger/$svc/pom.xml
+                      done
                       echo ""
-                      echo "=== After patch ==="
+                      echo "=== Step 2 Force Tomcat to 10.1.55 (override Spring Boots choice) ==="
+                      for svc in balancereader ledgerwriter transactionhistory; do
+                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
+                      done
+                      echo ""
+                      echo "=== After patch — Spring Boot version ==="
                       grep -n "3.5.14\|3.5.9" bank-of-anthos/src/ledger/*/pom.xml
+                      echo ""
+                      echo "=== After patch — Tomcat version override ==="
+                      grep -n "tomcat.version" bank-of-anthos/src/ledger/*/pom.xml
               - step:
                   type: Run
                   name: Build Java services
