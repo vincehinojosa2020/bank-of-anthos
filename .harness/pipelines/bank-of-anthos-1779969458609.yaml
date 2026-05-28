@@ -47,12 +47,12 @@ pipeline:
                         sed -i "s|<version>3.5.9</version>|<version>3.5.14</version>|g" bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo ""
-                      echo "Step 2: Tomcat 10.1.55 + Netty 4.1.135.Final overrides"
+                      echo "Step 2: Tomcat override to 10.1.55"
                       for svc in balancereader ledgerwriter transactionhistory; do
-                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>\n        <netty.version>4.1.135.Final</netty.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
+                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo "--- After ---"
-                      grep -nE "3.5.14|tomcat.version|netty.version" bank-of-anthos/src/ledger/*/pom.xml
+                      grep -nE "3.5.14|tomcat.version" bank-of-anthos/src/ledger/*/pom.xml
                       echo ""
                       echo "=== PYTHON PATCHES ==="
                       echo "--- Before (using portable find) ---"
@@ -72,29 +72,12 @@ pipeline:
                     shell: Sh
                     command: |-
                       set -e
-                      echo "=== ATTEMPT 1: Build with Netty 4.1.135.Final override ==="
-                      BUILD_OK=true
                       for svc in balancereader ledgerwriter transactionhistory; do
                         echo "=== Building $svc ==="
                         cd bank-of-anthos/src/ledger/$svc
-                        if ! mvn clean package -DskipTests -q 2>&1 | tail -30; then
-                          BUILD_OK=false
-                        fi
+                        mvn clean package -DskipTests -q
                         cd /harness
                       done
-                      if [ "$BUILD_OK" = "false" ]; then
-                        echo ""
-                        echo "=== FALLBACK: Netty 4.1.135.Final not available, trying 4.1.133.Final ==="
-                        for svc in balancereader ledgerwriter transactionhistory; do
-                          sed -i 's|<netty.version>4.1.135.Final</netty.version>|<netty.version>4.1.133.Final</netty.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
-                        done
-                        for svc in balancereader ledgerwriter transactionhistory; do
-                          echo "=== Re-building $svc ==="
-                          cd bank-of-anthos/src/ledger/$svc
-                          mvn clean package -DskipTests -q
-                          cd /harness
-                        done
-                      fi
                       echo ""
                       echo "=== Java artifacts produced ==="
                       find bank-of-anthos -name "*.jar" -not -path "*/.m2/*" | grep target
