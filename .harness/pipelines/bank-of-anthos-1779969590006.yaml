@@ -3,31 +3,40 @@ pipeline:
   identifier: Build_vincehinojosa2020_bank_of_anthos_1779969626752
   projectIdentifier: default_project
   orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: <YOUR_CODEBASE_CONNECTOR>
+        repoName: bank-of-anthos
+        build: <+input>
   stages:
     - stage:
-        name: Build
-        identifier: Build
+        name: Compile balancereader
+        identifier: Compile_balancereader
         type: CI
         spec:
           cloneCodebase: true
-          execution:
-            steps:
-              - step:
-                  type: Run
-                  name: Echo Welcome Message
-                  identifier: Echo_Welcome_Message
-                  spec:
-                    shell: Sh
-                    command: echo "Welcome to Harness CI"
           platform:
             os: Linux
             arch: Amd64
           runtime:
             type: Cloud
             spec: {}
-  properties:
-    ci:
-      codebase:
-        connectorRef: account.Github
-        repoName: vincehinojosa2020/bank-of-anthos
-        build: <+input>
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Maven build
+                  identifier: maven_build
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9-eclipse-temurin-17
+                    shell: Sh
+                    command: |-
+                      echo "=== Building bank-of-anthos · balancereader ==="
+                      cd src/ledger/balancereader
+                      mvn clean package -DskipTests
+                      echo ""
+                      echo "=== Build complete · artifacts: ==="
+                      ls -la target/*.jar
