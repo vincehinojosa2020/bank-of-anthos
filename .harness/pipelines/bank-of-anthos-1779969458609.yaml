@@ -105,6 +105,6 @@ pipeline:
                       ls -la bank-of-anthos/ | head -20
                       echo ""
                       echo "=== Running Lifecycle scan ==="
-                      java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
+                      java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos__vincehinojosa2020 -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
                       echo ""
                       echo "=== Scan complete ==="
