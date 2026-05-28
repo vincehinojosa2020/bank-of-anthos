@@ -45,14 +45,13 @@ pipeline:
                         sed -i "s|<version>3.5.9</version>|<version>3.5.14</version>|g" bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo ""
-                      echo "=== Step 2 Force Tomcat to 10.1.55 and Netty to 4.1.137 ==="
-                      # If Sonatype suggests different versions adjust here
+                      echo "=== Step 2 Force Tomcat to 10.1.55 ==="
                       for svc in balancereader ledgerwriter transactionhistory; do
-                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>\n        <netty.version>4.1.137.Final</netty.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
+                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo ""
                       echo "=== After patch — version overrides ==="
-                      grep -n "3.5.14\|tomcat.version\|netty.version" bank-of-anthos/src/ledger/*/pom.xml
+                      grep -n "3.5.14\|tomcat.version" bank-of-anthos/src/ledger/*/pom.xml
               - step:
                   type: Run
                   name: Build Java services
@@ -92,7 +91,6 @@ pipeline:
                         if [ -f requirements.txt ]; then
                           pip install -r requirements.txt --target ./venv_packages || echo "(continuing on install error)"
                           echo "=== Forcing cryptography upgrade to clear CVE-2026-39892 ==="
-                          # If Sonatype suggests a different version adjust here
                           pip install --upgrade "cryptography>=47.0.0" --target ./venv_packages --upgrade
                           ls ./venv_packages 2>/dev/null | wc -l | xargs -I {} echo "$svc installed packages count {}"
                         fi
