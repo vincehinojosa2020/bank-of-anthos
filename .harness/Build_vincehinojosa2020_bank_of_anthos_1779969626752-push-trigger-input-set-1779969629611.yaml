@@ -1,0 +1,14 @@
+inputSet:
+  name: Build_vincehinojosa2020_bank_of_anthos_1779969626752-push-trigger-input-set
+  identifier: Build_vincehinojosa2020_bank_of_anthos_1779969626752pushtriggerinputset
+  orgIdentifier: default
+  projectIdentifier: default_project
+  pipeline:
+    identifier: Build_vincehinojosa2020_bank_of_anthos_1779969626752
+    properties:
+      ci:
+        codebase:
+          build:
+            type: branch
+            spec:
+              branch: <+trigger.branch>
