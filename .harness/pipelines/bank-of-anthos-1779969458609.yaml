@@ -31,6 +31,24 @@ pipeline:
                       ls -la bank-of-anthos | head -20
               - step:
                   type: Run
+                  name: Apply Spring Boot upgrade patch
+                  identifier: patch_spring_boot
+                  spec:
+                    image: alpine:latest
+                    shell: Sh
+                    command: |-
+                      echo "=== Before patch ==="
+                      grep -n "3.5.9" bank-of-anthos/src/ledger/*/pom.xml
+                      echo ""
+                      echo "=== Applying upgrade 3.5.9 to 3.5.14 ==="
+                      sed -i 's|<version>3.5.9</version>|<version>3.5.14</version>|g' bank-of-anthos/src/ledger/balancereader/pom.xml
+                      sed -i 's|<version>3.5.9</version>|<version>3.5.14</version>|g' bank-of-anthos/src/ledger/ledgerwriter/pom.xml
+                      sed -i 's|<version>3.5.9</version>|<version>3.5.14</version>|g' bank-of-anthos/src/ledger/transactionhistory/pom.xml
+                      echo ""
+                      echo "=== After patch ==="
+                      grep -n "3.5.14\|3.5.9" bank-of-anthos/src/ledger/*/pom.xml
+              - step:
+                  type: Run
                   name: Build Java services
                   identifier: build_java
                   spec:
@@ -85,26 +103,7 @@ pipeline:
                     command: |-
                       set -ex
                       echo "=== Step started ==="
-                      echo "Working directory: $(pwd)"
-                      echo "IQ server URL set: $([ -n "$IQ_SERVER_URL" ] && echo YES || echo NO)"
-                      echo "IQ username set: $([ -n "$IQ_USERNAME" ] && echo YES || echo NO)"
-                      echo "IQ password set: $([ -n "$IQ_PASSWORD" ] && echo YES || echo NO)"
-                      echo ""
-                      echo "=== Checking curl ==="
                       which curl || (apt-get update && apt-get install -y curl)
-                      curl --version | head -1
-                      echo ""
-                      echo "=== Verifying ngrok tunnel ==="
-                      curl -v -H "ngrok-skip-browser-warning: true" "${IQ_SERVER_URL}/rest/config/proxy" 2>&1 | tail -20 || echo "Tunnel check failed but continuing"
-                      echo ""
-                      echo "=== Downloading Sonatype IQ CLI ==="
                       curl -fSL -o nexus-iq-cli.jar https://download.sonatype.com/clm/scanner/latest.jar
-                      ls -la nexus-iq-cli.jar
-                      echo ""
-                      echo "=== Verifying bank-of-anthos directory ==="
-                      ls -la bank-of-anthos/ | head -20
-                      echo ""
-                      echo "=== Running Lifecycle scan ==="
                       java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos__vincehinojosa2020 -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
-                      echo ""
                       echo "=== Scan complete ==="
