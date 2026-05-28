@@ -3,31 +3,45 @@ pipeline:
   identifier: Build_vincehinojosa2020_bank_of_anthos_1779969556568
   projectIdentifier: default_project
   orgIdentifier: default
+  tags: {}
   stages:
     - stage:
-        name: Build
-        identifier: Build
+        name: Compile balancereader
+        identifier: Compile_balancereader
         type: CI
         spec:
-          cloneCodebase: true
-          execution:
-            steps:
-              - step:
-                  type: Run
-                  name: Echo Welcome Message
-                  identifier: Echo_Welcome_Message
-                  spec:
-                    shell: Sh
-                    command: echo "Welcome to Harness CI"
+          cloneCodebase: false
           platform:
             os: Linux
             arch: Amd64
           runtime:
             type: Cloud
             spec: {}
-  properties:
-    ci:
-      codebase:
-        connectorRef: account.Github
-        repoName: vincehinojosa2020/bank-of-anthos
-        build: <+input>
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Maven build
+                  identifier: maven_build
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9-eclipse-temurin-17
+                    shell: Sh
+                    command: |-
+                      set -e
+
+                      echo "=== Installing git (if not present) ==="
+                      which git || (apt-get update -qq && apt-get install -y -qq git)
+
+                      echo ""
+                      echo "=== Cloning bank-of-anthos from GitHub ==="
+                      git clone --depth 1 https://github.com/GoogleCloudPlatform/bank-of-anthos.git
+                      cd bank-of-anthos/src/ledger/balancereader
+
+                      echo ""
+                      echo "=== Building with Maven ==="
+                      mvn clean package -DskipTests
+
+                      echo ""
+                      echo "=== Build complete · artifacts: ==="
+                      ls -la target/*.jar
