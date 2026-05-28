@@ -24,7 +24,6 @@ pipeline:
                   name: Maven build
                   identifier: maven_build
                   spec:
-                    connectorRef: account.harnessImage
                     image: maven:3.9-eclipse-temurin-17
                     shell: Sh
                     command: |-
