@@ -1,13 +1,13 @@
 pipeline:
-  name: Build bank-of-anthos
+  name: Build bank of anthos with Sonatype scan
   identifier: Build_vincehinojosa2020_bank_of_anthos_1779969556568
   projectIdentifier: default_project
   orgIdentifier: default
   tags: {}
   stages:
     - stage:
-        name: Compile balancereader
-        identifier: Compile_balancereader
+        name: Build and scan
+        identifier: Build_and_scan
         type: CI
         spec:
           cloneCodebase: false
@@ -21,26 +21,75 @@ pipeline:
             steps:
               - step:
                   type: Run
-                  name: Maven build
-                  identifier: maven_build
+                  name: Clone repo
+                  identifier: clone_repo
+                  spec:
+                    image: alpine/git:latest
+                    shell: Sh
+                    command: git clone --depth 1 https://github.com/GoogleCloudPlatform/bank-of-anthos.git
+              - step:
+                  type: Run
+                  name: Build Java services
+                  identifier: build_java
                   spec:
                     image: maven:3.9-eclipse-temurin-17
                     shell: Sh
                     command: |-
                       set -e
-
-                      echo "=== Installing git (if not present) ==="
-                      which git || (apt-get update -qq && apt-get install -y -qq git)
-
+                      for svc in balancereader ledgerwriter transactionhistory; do
+                        echo "=== Building $svc ==="
+                        cd bank-of-anthos/src/ledger/$svc
+                        mvn clean package -DskipTests -q
+                        cd /harness
+                      done
                       echo ""
-                      echo "=== Cloning bank-of-anthos from GitHub ==="
-                      git clone --depth 1 https://github.com/GoogleCloudPlatform/bank-of-anthos.git
-                      cd bank-of-anthos/src/ledger/balancereader
-
+                      echo "=== Java artifacts produced ==="
+                      find bank-of-anthos -name "*.jar" -not -path "*/.m2/*" | grep target
+              - step:
+                  type: Run
+                  name: Install Python services
+                  identifier: install_python
+                  spec:
+                    image: python:3.11-slim
+                    shell: Sh
+                    command: |-
+                      set -e
+                      apt-get update -qq && apt-get install -y -qq build-essential
+                      pip install --upgrade pip
+                      for svc in contacts userservice frontend; do
+                        echo "=== Installing $svc ==="
+                        if [ -d "bank-of-anthos/src/accounts/$svc" ]; then
+                          cd bank-of-anthos/src/accounts/$svc
+                        else
+                          cd bank-of-anthos/src/$svc
+                        fi
+                        if [ -f requirements.txt ]; then
+                          pip install -r requirements.txt --target ./venv_packages || echo "(continuing on install error)"
+                          ls ./venv_packages 2>/dev/null | wc -l | xargs -I {} echo "$svc installed packages count {}"
+                        fi
+                        cd /harness
+                      done
+              - step:
+                  type: Run
+                  name: Sonatype Lifecycle scan
+                  identifier: sonatype_scan
+                  spec:
+                    image: openjdk:17-slim
+                    shell: Sh
+                    envVariables:
+                      IQ_SERVER_URL: <+secrets.getValue("iq_server_url")>
+                      IQ_USERNAME: <+secrets.getValue("iq_username")>
+                      IQ_PASSWORD: <+secrets.getValue("iq_password")>
+                    command: |-
+                      set -e
+                      apt-get update -qq && apt-get install -y -qq curl
+                      echo "=== Verifying ngrok tunnel to IQ Server ==="
+                      curl -sf -H "ngrok-skip-browser-warning: true" "${IQ_SERVER_URL}/rest/config/proxy" -o /dev/null && echo "Tunnel reachable" || echo "Tunnel check returned non-200 (CLI may still work)"
                       echo ""
-                      echo "=== Building with Maven ==="
-                      mvn clean package -DskipTests
-
+                      echo "=== Downloading Sonatype IQ CLI ==="
+                      curl -sSL -o nexus-iq-cli.jar https://download.sonatype.com/clm/scanner/latest.jar
                       echo ""
-                      echo "=== Build complete · artifacts: ==="
-                      ls -la target/*.jar
+                      echo "=== Running Lifecycle scan ==="
+                      java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
+                      echo ""
+                      echo "=== Scan complete. Check IQ Server UI for results. ==="
