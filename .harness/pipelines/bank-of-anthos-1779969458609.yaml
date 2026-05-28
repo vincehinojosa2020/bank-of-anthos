@@ -31,8 +31,8 @@ pipeline:
                       ls -la bank-of-anthos | head -20
               - step:
                   type: Run
-                  name: Apply Spring Boot and Tomcat patch
-                  identifier: patch_deps
+                  name: Apply Java dependency patches
+                  identifier: patch_java_deps
                   spec:
                     image: alpine:latest
                     shell: Sh
@@ -45,16 +45,14 @@ pipeline:
                         sed -i "s|<version>3.5.9</version>|<version>3.5.14</version>|g" bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo ""
-                      echo "=== Step 2 Force Tomcat to 10.1.55 (override Spring Boots choice) ==="
+                      echo "=== Step 2 Force Tomcat to 10.1.55 and Netty to 4.1.137 ==="
+                      # If Sonatype suggests different versions adjust here
                       for svc in balancereader ledgerwriter transactionhistory; do
-                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
+                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>\n        <netty.version>4.1.137.Final</netty.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo ""
-                      echo "=== After patch — Spring Boot version ==="
-                      grep -n "3.5.14\|3.5.9" bank-of-anthos/src/ledger/*/pom.xml
-                      echo ""
-                      echo "=== After patch — Tomcat version override ==="
-                      grep -n "tomcat.version" bank-of-anthos/src/ledger/*/pom.xml
+                      echo "=== After patch — version overrides ==="
+                      grep -n "3.5.14\|tomcat.version\|netty.version" bank-of-anthos/src/ledger/*/pom.xml
               - step:
                   type: Run
                   name: Build Java services
@@ -75,7 +73,7 @@ pipeline:
                       find bank-of-anthos -name "*.jar" -not -path "*/.m2/*" | grep target
               - step:
                   type: Run
-                  name: Install Python services
+                  name: Install Python services with cryptography upgrade
                   identifier: install_python
                   spec:
                     image: python:3.11-slim
@@ -93,6 +91,9 @@ pipeline:
                         fi
                         if [ -f requirements.txt ]; then
                           pip install -r requirements.txt --target ./venv_packages || echo "(continuing on install error)"
+                          echo "=== Forcing cryptography upgrade to clear CVE-2026-39892 ==="
+                          # If Sonatype suggests a different version adjust here
+                          pip install --upgrade "cryptography>=47.0.0" --target ./venv_packages --upgrade
                           ls ./venv_packages 2>/dev/null | wc -l | xargs -I {} echo "$svc installed packages count {}"
                         fi
                         cd /harness
