@@ -31,27 +31,37 @@ pipeline:
                       ls -la bank-of-anthos | head -20
               - step:
                   type: Run
-                  name: Apply Java dependency patches
-                  identifier: patch_java_deps
+                  name: Apply dependency patches
+                  identifier: patch_deps
                   spec:
                     image: alpine:latest
                     shell: Sh
                     command: |-
-                      echo "=== Before patch ==="
-                      grep -n "3.5.9" bank-of-anthos/src/ledger/*/pom.xml || echo "(no 3.5.9 found)"
+                      echo "=== JAVA PATCHES ==="
+                      echo "--- Before ---"
+                      grep -n "3.5.9" bank-of-anthos/src/ledger/*/pom.xml || echo "(no 3.5.9)"
                       echo ""
-                      echo "=== Step 1 Upgrade Spring Boot 3.5.9 to 3.5.14 ==="
+                      echo "Step 1: Spring Boot 3.5.9 to 3.5.14"
                       for svc in balancereader ledgerwriter transactionhistory; do
                         sed -i "s|<version>3.5.9</version>|<version>3.5.14</version>|g" bank-of-anthos/src/ledger/$svc/pom.xml
                       done
                       echo ""
-                      echo "=== Step 2 Force Tomcat to 10.1.55 ==="
+                      echo "Step 2: Tomcat override to 10.1.55 + Netty override to 4.1.135.Final"
                       for svc in balancereader ledgerwriter transactionhistory; do
-                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
+                        sed -i 's|<properties>|<properties>\n        <tomcat.version>10.1.55</tomcat.version>\n        <netty.version>4.1.135.Final</netty.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
                       done
+                      echo "--- After ---"
+                      grep -nE "3.5.14|tomcat.version|netty.version" bank-of-anthos/src/ledger/*/pom.xml
                       echo ""
-                      echo "=== After patch — version overrides ==="
-                      grep -n "3.5.14\|tomcat.version" bank-of-anthos/src/ledger/*/pom.xml
+                      echo "=== PYTHON PATCHES ==="
+                      echo "--- Before ---"
+                      grep -rn "cryptography==46.0.3" bank-of-anthos/src --include="requirements*.txt" --include="requirements*.in" 2>/dev/null
+                      echo ""
+                      echo "Step 3: cryptography==46.0.3 to cryptography==47.0.0 (all requirements files)"
+                      find bank-of-anthos/src -name "requirements*.txt" -exec sed -i "s|cryptography==46.0.3|cryptography==47.0.0|g" {} \;
+                      find bank-of-anthos/src -name "requirements*.in" -exec sed -i "s|cryptography==46.0.3|cryptography==47.0.0|g" {} \;
+                      echo "--- After ---"
+                      grep -rn "cryptography==" bank-of-anthos/src --include="requirements*.txt" --include="requirements*.in" 2>/dev/null
               - step:
                   type: Run
                   name: Build Java services
@@ -61,18 +71,35 @@ pipeline:
                     shell: Sh
                     command: |-
                       set -e
+                      echo "=== ATTEMPT 1: Build with Netty 4.1.135.Final override ==="
+                      BUILD_OK=true
                       for svc in balancereader ledgerwriter transactionhistory; do
                         echo "=== Building $svc ==="
                         cd bank-of-anthos/src/ledger/$svc
-                        mvn clean package -DskipTests -q
+                        if ! mvn clean package -DskipTests -q 2>&1 | tail -30; then
+                          BUILD_OK=false
+                        fi
                         cd /harness
                       done
+                      if [ "$BUILD_OK" = "false" ]; then
+                        echo ""
+                        echo "=== FALLBACK: Netty 4.1.135.Final not available, trying 4.1.133.Final ==="
+                        for svc in balancereader ledgerwriter transactionhistory; do
+                          sed -i 's|<netty.version>4.1.135.Final</netty.version>|<netty.version>4.1.133.Final</netty.version>|' bank-of-anthos/src/ledger/$svc/pom.xml
+                        done
+                        for svc in balancereader ledgerwriter transactionhistory; do
+                          echo "=== Re-building $svc ==="
+                          cd bank-of-anthos/src/ledger/$svc
+                          mvn clean package -DskipTests -q
+                          cd /harness
+                        done
+                      fi
                       echo ""
                       echo "=== Java artifacts produced ==="
                       find bank-of-anthos -name "*.jar" -not -path "*/.m2/*" | grep target
               - step:
                   type: Run
-                  name: Install Python services with cryptography upgrade
+                  name: Install Python services
                   identifier: install_python
                   spec:
                     image: python:3.11-slim
@@ -89,10 +116,9 @@ pipeline:
                           cd bank-of-anthos/src/$svc
                         fi
                         if [ -f requirements.txt ]; then
-                          pip install -r requirements.txt --target ./venv_packages || echo "(continuing on install error)"
-                          echo "=== Forcing cryptography upgrade to clear CVE-2026-39892 ==="
-                          pip install --upgrade "cryptography>=47.0.0" --target ./venv_packages --upgrade
-                          ls ./venv_packages 2>/dev/null | wc -l | xargs -I {} echo "$svc installed packages count {}"
+                          pip install -r requirements.txt --target ./venv_packages
+                          echo "=== $svc cryptography version installed ==="
+                          ls ./venv_packages | grep -i crypto || echo "(no cryptography found)"
                         fi
                         cd /harness
                       done
@@ -109,7 +135,6 @@ pipeline:
                       IQ_PASSWORD: <+secrets.getValue("iq_password")>
                     command: |-
                       set -ex
-                      echo "=== Step started ==="
                       which curl || (apt-get update && apt-get install -y curl)
                       curl -fSL -o nexus-iq-cli.jar https://download.sonatype.com/clm/scanner/latest.jar
                       java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos__vincehinojosa2020 -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
