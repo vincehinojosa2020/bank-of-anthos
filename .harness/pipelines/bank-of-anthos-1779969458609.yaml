@@ -121,5 +121,6 @@ pipeline:
                       set -ex
                       which curl || (apt-get update && apt-get install -y curl)
                       curl -fSL -o nexus-iq-cli.jar https://download.sonatype.com/clm/scanner/latest.jar
-                      java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos__vincehinojosa2020 -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
+                      java -Dhttp.agent="nexus-iq-cli-harness" -jar nexus-iq-cli.jar -i bank-of-anthos__vincehinojosa2020 -ra -s "$IQ_SERVER_URL" -a "$IQ_USERNAME:$IQ_PASSWORD" -t build bank-of-anthos
                       echo "=== Scan complete ==="
+                      # -ra does reachability analysis (must be declared and we do this for java and javascript) 
